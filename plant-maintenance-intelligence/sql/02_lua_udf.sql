@@ -97,7 +97,7 @@ function run(ctx)
 
     -- ---- Component 4: Service overdue (weight 0.15) ----
     local overdue_ratio = safe_div(hrs_svc, svc_int)
-    local s_svc = clamp(overdue_ratio - 0.8) * 5.0 * 0.15
+    local s_svc = clamp((overdue_ratio - 0.8) / 0.2) * 0.15
 
     -- ---- Component 5: Power anomaly (weight 0.10) ----
     local pwr_dev = math.abs(safe_div(pwr - bpwr, bpwr))

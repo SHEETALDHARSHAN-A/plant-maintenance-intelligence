@@ -408,23 +408,23 @@ with col_l:
     st.markdown('<span class="section-tag">OVERVIEW</span>', unsafe_allow_html=True)
     st.subheader("Machine Risk Overview")
     logger.debug("Fetching machine risk overview data")
-        overview_sql = f"""
+    overview_sql = f"""
         SELECT machine_id      AS MACHINE,
                plant_id        AS PLANT,
-             machine_type    AS MACHINE_TYPE,
+               machine_type    AS MACHINE_TYPE,
                location_zone   AS LOCATION_ZONE,
-             criticality_class AS CRITICALITY_CLASS,
-                             {tier_case_sql('risk_score')} AS RISK_TIER,
+               criticality_class AS CRITICALITY_CLASS,
+               {tier_case_sql('risk_score')} AS RISK_TIER,
                ROUND(risk_score, 4) AS SCORE,
                top_signal      AS TOP_SIGNAL,
-             recommended_action AS RECOMMENDED_ACTION,
+               recommended_action AS RECOMMENDED_ACTION,
                TO_CHAR(reading_ts, 'YYYY-MM-DD HH24:MI') AS LAST_READING
         FROM PLANT_MAINTENANCE.V_LATEST_RISK_SUMMARY
-                                WHERE UPPER(TRIM(plant_id))  IN ({plant_ph})
-                                                                                AND {tier_case_sql('risk_score')} IN ({tier_ph})
-                ORDER BY risk_score DESC
-        """
-        overview_df = query_df(overview_sql, params=(plant_params + tier_params))
+        WHERE UPPER(TRIM(plant_id)) IN ({plant_ph})
+          AND {tier_case_sql('risk_score')} IN ({tier_ph})
+        ORDER BY risk_score DESC
+    """
+    overview_df = query_df(overview_sql, params=(plant_params + tier_params))
     if not overview_df.empty:
         logger.info(f"Overview table: {len(overview_df)} machines displayed")
         def style_tier(val):
@@ -494,7 +494,7 @@ logger.info("Rendering Row 2: Risk score trend chart")
 st.markdown('<span class="section-tag">TREND</span>', unsafe_allow_html=True)
 st.subheader("Risk Score Trend (all scored readings)")
 
-# Use all scored results ordered by time — not just last 24h (mock data is historical)
+# Use all scored results ordered by time — the mock dataset is historical
 logger.debug("Fetching trend data for all machines")
 trend_sql = f"""
     SELECT s.machine_id  AS MACHINE,
@@ -505,8 +505,7 @@ trend_sql = f"""
            s.top_signal  AS TOP_SIGNAL
     FROM PLANT_MAINTENANCE.SCORED_TELEMETRY_RESULTS s
     JOIN PLANT_MAINTENANCE.MACHINE_REGISTRY r ON s.machine_id = r.machine_id
-        WHERE s.reading_ts >= ADD_HOURS(CURRENT_TIMESTAMP, -24)
-          AND UPPER(TRIM(r.plant_id))  IN ({plant_ph})
+        WHERE UPPER(TRIM(r.plant_id))  IN ({plant_ph})
           AND {tier_case_sql('s.risk_score')} IN ({tier_ph})
     ORDER BY s.reading_ts ASC
 """
@@ -546,7 +545,16 @@ machines_df = query_df(
 machine_list = machines_df["MACHINE_ID"].tolist() if not machines_df.empty else []
 logger.info(f"Available machines for drilldown: {len(machine_list)} machines")
 
+if not machine_list:
+    st.info("No machines available for drilldown.")
+    st.stop()
+
 selected = st.selectbox("Select a machine", options=machine_list)
+selected = str(selected).strip()
+
+if selected not in machine_list:
+    st.error("Invalid machine selection.")
+    st.stop()
 
 if selected:
     logger.info(f"Machine selected for drilldown: {selected}")
@@ -555,7 +563,7 @@ if selected:
     with d1:
         st.markdown(f"**Last 72 sensor readings — `{selected}`**")
         logger.debug(f"Fetching sensor telemetry for machine {selected}")
-        sensor_df = query_df(f"""
+        sensor_sql = """
             SELECT TO_CHAR(reading_ts,'YYYY-MM-DD HH24:MI') AS READING_TIME,
                    temperature_c   AS TEMP_C,
                    vibration_mm_s  AS VIB_MM_S,
@@ -564,10 +572,11 @@ if selected:
                    operating_mode  AS OPERATING_MODE,
                    error_code      AS ERROR_CODE
             FROM PLANT_MAINTENANCE.MACHINE_TELEMETRY
-            WHERE machine_id = '{selected}'
+            WHERE machine_id = ?
             ORDER BY reading_ts DESC
             LIMIT 72
-        """)
+        """
+        sensor_df = query_df(sensor_sql, params=[selected])
         if not sensor_df.empty:
             logger.info(f"Sensor data retrieved: {len(sensor_df)} readings for {selected}")
             st.dataframe(sensor_df, use_container_width=True, height=300)
@@ -578,15 +587,16 @@ if selected:
     with d2:
         st.markdown(f"**Risk score history — `{selected}`**")
         logger.debug(f"Fetching risk score history for machine {selected}")
-        hist_df = query_df(f"""
+        hist_sql = f"""
             SELECT reading_ts  AS READING_TS,
                    risk_score  AS RISK_SCORE,
                    {tier_case_sql('risk_score')} AS TIER,
                    top_signal  AS TOP_SIGNAL
             FROM PLANT_MAINTENANCE.SCORED_TELEMETRY_RESULTS
-            WHERE machine_id = '{selected}'
+            WHERE machine_id = ?
             ORDER BY reading_ts ASC
-        """)
+        """
+        hist_df = query_df(hist_sql, params=[selected])
         if not hist_df.empty:
             logger.info(f"Risk score history retrieved: {len(hist_df)} records for {selected}")
             fig3 = px.line(
@@ -602,14 +612,15 @@ if selected:
 
     # Latest recommendation box
     logger.debug(f"Fetching latest risk assessment for machine {selected}")
-    latest_df = query_df(f"""
+    latest_sql = f"""
             SELECT {tier_case_sql('risk_score')} AS RISK_TIER,
              ROUND(risk_score,4) AS RISK_SCORE,
              top_signal AS TOP_SIGNAL,
              recommended_action AS RECOMMENDED_ACTION
         FROM PLANT_MAINTENANCE.V_LATEST_RISK_SUMMARY
-        WHERE machine_id = '{selected}'
-    """)
+        WHERE machine_id = ?
+    """
+    latest_df = query_df(latest_sql, params=[selected])
     if not latest_df.empty:
         row    = latest_df.iloc[0]
         tier   = str(row.get("RISK_TIER",   "UNKNOWN"))

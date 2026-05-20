@@ -8,6 +8,7 @@ CREATE SCHEMA IF NOT EXISTS PLANT_MAINTENANCE;
 OPEN SCHEMA PLANT_MAINTENANCE;
 
 -- Drop in FK-safe order (child tables first) for idempotent re-runs
+DROP VIEW  IF EXISTS V_ACTIONABLE_RISK;
 DROP VIEW  IF EXISTS V_RISK_TREND_24H;
 DROP VIEW  IF EXISTS V_LATEST_RISK_SUMMARY;
 DROP VIEW  IF EXISTS V_TELEMETRY_FEATURES;
@@ -159,29 +160,44 @@ CREATE OR REPLACE VIEW V_ACTIONABLE_RISK AS
 WITH latest AS (
     SELECT *
     FROM PLANT_MAINTENANCE.V_LATEST_RISK_SUMMARY
+), ranked AS (
+    SELECT
+        l.machine_id,
+        l.plant_id,
+        l.machine_type,
+        l.location_zone,
+        l.criticality_class,
+        l.reading_ts,
+        l.risk_score,
+        l.risk_tier,
+        l.top_signal,
+        l.recommended_action AS action,
+        CASE
+            WHEN l.top_signal = 'VIBRATION' THEN 'Elevated vibration relative to baseline (Z-score)'
+            WHEN l.top_signal = 'TEMPERATURE' THEN 'Elevated temperature relative to baseline (Z-score)'
+            WHEN l.top_signal = 'PRESSURE' THEN 'Pressure deviation from baseline'
+            WHEN l.top_signal = 'POWER' THEN 'Power draw anomaly relative to baseline'
+            WHEN l.top_signal = 'SERVICE_OVERDUE' THEN 'Approaching or past scheduled service interval'
+            WHEN l.top_signal = 'ERROR_CODE_E5XX' THEN 'Critical error code observed (E5xx)'
+            WHEN l.top_signal = 'DATA_LOSS' THEN 'Telemetry or sensor data missing - investigate connectivity'
+            ELSE l.top_signal
+        END AS reason,
+        ROW_NUMBER() OVER (ORDER BY l.risk_score DESC) AS priority_rank
+    FROM latest l
 )
 SELECT
-    l.machine_id,
-    l.plant_id,
-    l.machine_type,
-    l.location_zone,
-    l.criticality_class,
-    l.reading_ts,
-    l.risk_score,
-    l.risk_tier,
-    l.top_signal,
-    l.recommended_action AS action,
-    -- Human-readable reason mapped from top_signal
-    CASE
-        WHEN l.top_signal = 'VIBRATION' THEN 'Elevated vibration relative to baseline (Z-score)'
-        WHEN l.top_signal = 'TEMPERATURE' THEN 'Elevated temperature relative to baseline (Z-score)'
-        WHEN l.top_signal = 'PRESSURE' THEN 'Pressure deviation from baseline'
-        WHEN l.top_signal = 'POWER' THEN 'Power draw anomaly relative to baseline'
-        WHEN l.top_signal = 'SERVICE_OVERDUE' THEN 'Approaching or past scheduled service interval'
-        WHEN l.top_signal = 'ERROR_CODE_E5XX' THEN 'Critical error code observed (E5xx)'
-        WHEN l.top_signal = 'DATA_LOSS' THEN 'Telemetry or sensor data missing — investigate connectivity'
-        ELSE l.top_signal
-    END AS reason,
-    ROW_NUMBER() OVER (ORDER BY l.risk_score DESC) AS priority_rank,
-    CASE WHEN ROW_NUMBER() OVER (ORDER BY l.risk_score DESC) <= 5 THEN TRUE ELSE FALSE END AS is_top_5
-FROM latest l;
+    machine_id,
+    plant_id,
+    machine_type,
+    location_zone,
+    criticality_class,
+    reading_ts,
+    risk_score,
+    risk_tier,
+    top_signal,
+    action,
+    reason,
+    priority_rank,
+    CASE WHEN priority_rank <= 5 THEN TRUE ELSE FALSE END AS is_top_5
+FROM ranked;
+

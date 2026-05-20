@@ -45,9 +45,9 @@ MACHINES = [
         "baseline_pressure_bar": 12.0, "baseline_power_kw": 150.0,
         "stddev_temp": 3.0, "stddev_vibration": 0.4,
         "service_interval_h": 2000,
-        "last_service_offset_h": 1950,   # already 97.5% through interval → overdue
+        "last_service_offset_h": 1950,   # already 97.5% through interval -> overdue
         "degradation": {
-            "temp_slope":      0.050,    # calibrated: score=0.95 at h719 → CRITICAL
+            "temp_slope":      0.050,    # calibrated: score=0.95 at h719 -> CRITICAL
             "vib_slope":       0.0075,
             "vib_spike_prob":  0.08,
             "vib_spike_mag":   4.0,
@@ -65,7 +65,7 @@ MACHINES = [
         "service_interval_h": 1500,
         "last_service_offset_h": 1480,   # 98.7% through interval
         "degradation": {
-            "temp_slope":      0.050,    # calibrated: score=1.00 at h719 → CRITICAL
+            "temp_slope":      0.050,    # calibrated: score=1.00 at h719 -> CRITICAL
             "vib_slope":       0.0075,
             "vib_spike_prob":  0.15,
             "vib_spike_mag":   7.0,
@@ -85,7 +85,7 @@ MACHINES = [
         "service_interval_h": 1800,
         "last_service_offset_h": 1600,   # 88.9% through interval
         "degradation": {
-            "temp_slope":      0.01000,  # calibrated: score=0.68 at h719 → HIGH
+            "temp_slope":      0.01000,  # calibrated: score=0.68 at h719 -> HIGH
             "vib_slope":       0.00150,
             "vib_spike_prob":  0.05,
             "vib_spike_mag":   2.5,
@@ -103,7 +103,7 @@ MACHINES = [
         "service_interval_h": 2500,
         "last_service_offset_h": 2300,   # 92% through interval
         "degradation": {
-            "temp_slope":      0.01000,  # calibrated: score=0.72 at h719 → HIGH
+            "temp_slope":      0.01000,  # calibrated: score=0.72 at h719 -> HIGH
             "vib_slope":       0.00150,
             "vib_spike_prob":  0.06,
             "vib_spike_mag":   2.0,
@@ -121,7 +121,7 @@ MACHINES = [
         "service_interval_h": 2000,
         "last_service_offset_h": 1750,   # 87.5% through interval
         "degradation": {
-            "temp_slope":      0.01200,  # calibrated: score=0.74 at h719 → HIGH
+            "temp_slope":      0.01200,  # calibrated: score=0.74 at h719 -> HIGH
             "vib_slope":       0.00180,
             "vib_spike_prob":  0.04,
             "vib_spike_mag":   1.8,
@@ -141,7 +141,7 @@ MACHINES = [
         "service_interval_h": 2200,
         "last_service_offset_h": 1500,   # 68% through interval
         "degradation": {
-            "temp_slope":      0.00938,  # calibrated: score=0.48 at h719 → MEDIUM
+            "temp_slope":      0.00938,  # calibrated: score=0.48 at h719 -> MEDIUM
             "vib_slope":       0.00141,
             "vib_spike_prob":  0.02,
             "vib_spike_mag":   1.2,
@@ -159,7 +159,7 @@ MACHINES = [
         "service_interval_h": 1800,
         "last_service_offset_h": 1200,   # 66% through interval
         "degradation": {
-            "temp_slope":      0.00938,  # calibrated: score=0.47 at h719 → MEDIUM
+            "temp_slope":      0.00938,  # calibrated: score=0.47 at h719 -> MEDIUM
             "vib_slope":       0.00141,
             "vib_spike_prob":  0.02,
             "vib_spike_mag":   1.0,
@@ -177,7 +177,7 @@ MACHINES = [
         "service_interval_h": 1600,
         "last_service_offset_h": 1100,   # 68% through interval
         "degradation": {
-            "temp_slope":      0.00625,  # calibrated: score=0.38 at h719 → MEDIUM
+            "temp_slope":      0.00625,  # calibrated: score=0.38 at h719 -> MEDIUM
             "vib_slope":       0.00094,
             "vib_spike_prob":  0.02,
             "vib_spike_mag":   1.1,
@@ -288,7 +288,7 @@ def write_registry(machines, out_path):
                     "criticality_class":        m["criticality_class"],
                 })
         logger.info(f"Registry written successfully: {len(machines)} machines")
-        print(f"  ✓ Registry: {out_path}  ({len(machines)} machines)")
+        print(f"  OK Registry: {out_path}  ({len(machines)} machines)")
     except Exception as e:
         logger.error(f"Failed to write registry to {out_path}: {e}", exc_info=True)
         raise
@@ -310,7 +310,7 @@ def write_telemetry(machines, out_path):
                     w.writerow(generate_reading(m, h))
                     total += 1
         logger.info(f"Telemetry written successfully: {total:,} rows ({len(machines)} machines × {HOURS} hours)")
-        print(f"  ✓ Telemetry: {out_path}  ({total:,} rows)")
+        print(f"  OK Telemetry: {out_path}  ({total:,} rows)")
     except Exception as e:
         logger.error(f"Failed to write telemetry to {out_path}: {e}", exc_info=True)
         raise

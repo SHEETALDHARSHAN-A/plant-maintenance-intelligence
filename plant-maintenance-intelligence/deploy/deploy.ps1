@@ -32,7 +32,7 @@ $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
 )
 $acl.AddAccessRule($rule)
 Set-Acl -Path $PemFile -AclObject $acl
-Write-Host "  ✓ PEM permissions fixed for $currentUser" -ForegroundColor Green
+Write-Host "  OK PEM permissions fixed for $currentUser" -ForegroundColor Green
 
 # ── Step 2: Test SSH connectivity ─────────────────────────────
 Write-Host "`n[2/6] Testing SSH connection to $EC2Host..." -ForegroundColor Yellow
@@ -44,7 +44,7 @@ $sshTest = ssh -i $PemFile `
     "echo SSH_OK" 2>&1
 
 if ($sshTest -match "SSH_OK") {
-    Write-Host "  ✓ SSH connection successful" -ForegroundColor Green
+    Write-Host "  OK SSH connection successful" -ForegroundColor Green
 } else {
     Write-Host "  ✗ SSH connection FAILED" -ForegroundColor Red
     Write-Host "  Output: $sshTest"
@@ -67,9 +67,9 @@ Write-Host "`n[3/6] Generating mock data locally..." -ForegroundColor Yellow
 $dataDir = Join-Path $ProjectDir "data"
 if (-not (Test-Path (Join-Path $dataDir "machine_telemetry.csv"))) {
     python "$ProjectDir\scripts\generate_mock_data.py"
-    Write-Host "  ✓ Mock data generated" -ForegroundColor Green
+    Write-Host "  OK Mock data generated" -ForegroundColor Green
 } else {
-    Write-Host "  ✓ Mock data already exists, skipping" -ForegroundColor Green
+    Write-Host "  OK Mock data already exists, skipping" -ForegroundColor Green
 }
 
 # ── Step 4: Upload project to EC2 ─────────────────────────────
@@ -81,7 +81,7 @@ scp -i $PemFile `
     -r $ProjectDir `
     "${RemoteUser}@${EC2Host}:~/plant-maintenance"
 
-Write-Host "  ✓ Project uploaded to ~/plant-maintenance" -ForegroundColor Green
+Write-Host "  OK Project uploaded to ~/plant-maintenance" -ForegroundColor Green
 
 # ── Step 5: Run remote installation ───────────────────────────
 Write-Host "`n[5/6] Running Exasol CE installation on EC2..." -ForegroundColor Yellow
@@ -92,7 +92,7 @@ ssh -i $PemFile `
     "${RemoteUser}@${EC2Host}" `
     "chmod +x ~/plant-maintenance/deploy/install_exasol.sh && bash ~/plant-maintenance/deploy/install_exasol.sh"
 
-Write-Host "  ✓ Remote installation complete" -ForegroundColor Green
+Write-Host "  OK Remote installation complete" -ForegroundColor Green
 
 # ── Step 6: Load data and start dashboard ─────────────────────
 Write-Host "`n[6/6] Loading data into Exasol and starting dashboard..." -ForegroundColor Yellow
