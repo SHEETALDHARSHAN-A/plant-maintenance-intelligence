@@ -1,0 +1,84 @@
+# =============================================================
+# .gitignore — Plant Maintenance Intelligence
+# =============================================================
+
+# ── Credentials & secrets — NEVER commit these ───────────────
+.env
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# ── Generated data — too large and regenerated on demand ─────
+data/machine_telemetry.csv
+data/machine_registry.csv
+
+# ── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+*.so
+
+# ── Virtual environments ──────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env.local
+.env.*.local
+
+# ── Logs — generated at runtime, not source code ─────────────
+logs/
+*.log
+/tmp/
+
+# ── Jupyter ───────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── OS junk ───────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ── IDE ───────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Streamlit cache ───────────────────────────────────────────
+.streamlit/
+
+# ── Pytest / coverage ─────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ── Compiled SQL / temp files ─────────────────────────────────
+*.tmp
+*.bak
+*.orig
