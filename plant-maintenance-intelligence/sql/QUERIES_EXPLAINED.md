@@ -277,6 +277,19 @@ WHERE (s.machine_id, s.risk_score) IN (
     )
     GROUP BY machine_id
 )
+
+---
+
+## View 4: V_ACTIONABLE_RISK
+
+This view maps the latest risk summary into a concise, human-friendly actionable table for operators. It includes:
+
+- `reason`: a short plain-language explanation derived from `top_signal` (e.g., "Elevated vibration relative to baseline").
+- `action`: the `recommended_action` produced by the scoring UDF.
+- `priority_rank`: a rank ordered by `risk_score` (1 = highest risk).
+- `is_top_5`: boolean flag for the highest-priority five machines.
+
+Use this view to drive top-N notifications, runbooks, or a simple "what to do next" export for operations.
 ```
 
 **The bug this view fixed:**
@@ -370,8 +383,9 @@ FROM (
             f.machine_id,
 
             -- COALESCE: if the sensor reading is NULL, fall back to the baseline.
-            -- This means a machine with a dead sensor scores as if it's running normally,
-            -- EXCEPT the missing_penalty (+0.50) is applied inside the UDF.
+            -- In the UDF, if required sensors (temperature or vibration) are missing,
+            -- a distinct `DATA_LOSS` tier is emitted rather than blending a penalty
+            -- into the numeric score. This flags telemetry/connectivity issues for IT.
             COALESCE(f.temperature_c,  f.baseline_temp_c),
             COALESCE(f.vibration_mm_s, f.baseline_vibration),
             COALESCE(f.pressure_bar,   f.baseline_pressure_bar),

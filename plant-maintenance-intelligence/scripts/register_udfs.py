@@ -83,9 +83,9 @@ local function is_null(v)
 end
 
 function run(ctx)
-    local missing_penalty = 0
-    if is_null(ctx.tc) or is_null(ctx.vib) or is_null(ctx.pres) or is_null(ctx.pwr) then
-        missing_penalty = 0.5
+    local missing_required = false
+    if is_null(ctx.tc) or is_null(ctx.vib) then
+        missing_required = true
     end
 
     local t_val  = (not is_null(ctx.tc) and ctx.tc) or (not is_null(ctx.bt) and ctx.bt) or 0
@@ -120,13 +120,18 @@ function run(ctx)
     local raw    = s_vib + s_temp + s_pres + s_svc + s_pwr
     local e5xx   = 0
     if type(e_val) == "string" and string.match(e_val, "^E5") then e5xx = 0.25 end
-    local score  = clamp(raw + e5xx + missing_penalty)
+    local score  = clamp(raw + e5xx)
 
     local tier
-    if     score >= 0.80 then tier = "CRITICAL"
-    elseif score >= 0.60 then tier = "HIGH"
-    elseif score >= 0.35 then tier = "MEDIUM"
-    else                       tier = "LOW"
+    if missing_required then
+        tier = "DATA_LOSS"
+        score = 0.0
+    else
+        if     score >= 0.80 then tier = "CRITICAL"
+        elseif score >= 0.60 then tier = "HIGH"
+        elseif score >= 0.35 then tier = "MEDIUM"
+        else                       tier = "LOW"
+        end
     end
 
     local sigs = {
@@ -137,7 +142,6 @@ function run(ctx)
         {n="POWER",           v=s_pwr  / 0.10}
     }
     if e5xx > 0 then table.insert(sigs, {n="ERROR_CODE_E5XX", v=1.0}) end
-    if missing_penalty > 0 then table.insert(sigs, {n="MISSING_SENSOR_DATA", v=1.0}) end
 
     local top_n = "NONE"
     local top_v = -1

@@ -84,7 +84,7 @@ def connect(host, port, user, password):
 # ── Schema SQL (no Lua UDFs — those are registered separately) ─────────────────
 def run_schema(conn):
     logger.info("Creating schema, tables, and views")
-    print("\n📄 Creating schema, tables, views...")
+    print("\n Creating schema, tables, views...")
     
     try:
         conn.execute("CREATE SCHEMA IF NOT EXISTS PLANT_MAINTENANCE")
@@ -242,7 +242,7 @@ WHERE s.reading_ts >= ADD_HOURS(CURRENT_TIMESTAMP, -24)""")
 # ── Lua UDFs (correct run(ctx) pattern for Exasol scalar UDFs) ────────────────
 def register_udfs(conn):
     logger.info("Registering Lua UDFs")
-    print("\n📄 Registering Lua UDFs...")
+    print("\n Registering Lua UDFs...")
     
     try:
         conn.execute("OPEN SCHEMA PLANT_MAINTENANCE")
@@ -399,7 +399,7 @@ def bulk_load_csv(conn, csv_path, table, schema="PLANT_MAINTENANCE"):
 
 # ── Scoring ────────────────────────────────────────────────────────────────────
 def run_scoring(conn):
-    print("\n📄 Running Lua UDF scoring across all telemetry...")
+    print("\n Running Lua UDF scoring across all telemetry...")
     conn.execute("OPEN SCHEMA PLANT_MAINTENANCE")
     conn.execute("DELETE FROM SCORED_TELEMETRY_RESULTS")
 
