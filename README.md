@@ -29,11 +29,11 @@ All design and decision documents are in `docs/`:
 
 | File | What it covers |
 |------|----------------|
-| [PRD.md](docs/PRD.md) | Product requirements — the problem I'm solving, scoring weights, risk tiers, and business impact targets |
-| [ARD.md](docs/ARD.md) | Architecture decisions — data model, schema design, SQL corrections, and how each component maps to a production equivalent |
-| [Research.md](docs/Research.md) | Why I picked Exasol, Lua, rule-based scoring, and Streamlit over the alternatives |
-| [current_implementation.md](docs/current_implementation.md) | Full walkthrough of what I built — the pipeline, scoring formula, dashboard, assumptions, and known limitations |
-| [Future_Implementations.md](docs/Future_Implementations.md) | Production scaling plan — Kafka ingestion, Airflow DAGs, Isolation Forest ML, and Grafana migration |
+| [PRD.md](plant-maintenance-intelligence/docs/PRD.md) | Product requirements — the problem I'm solving, scoring weights, risk tiers, and business impact targets |
+| [ARD.md](plant-maintenance-intelligence/docs/ARD.md) | Architecture decisions — data model, schema design, SQL corrections, and how each component maps to a production equivalent |
+| [Research.md](plant-maintenance-intelligence/docs/Research.md) | Why I picked Exasol, Lua, rule-based scoring, and Streamlit over the alternatives |
+| [current_implementation.md](plant-maintenance-intelligence/docs/current_implementation.md) | Full walkthrough of what I built — the pipeline, scoring formula, dashboard, assumptions, and known limitations |
+| [Future_Implementations.md](plant-maintenance-intelligence/docs/Future_Implementations.md) | Production scaling plan — Kafka ingestion, Airflow DAGs, Isolation Forest ML, and Grafana migration |
 
 ---
 
@@ -41,7 +41,7 @@ All design and decision documents are in `docs/`:
 
 ### Scored Output
 
-The `Results/Result-datas/Overview_data.csv` file has the actual scored output from a full run. Here's what it looks like:
+The `plant-maintenance-intelligence/Results/Result-datas/Overview_data.csv` file has the actual scored output from a full run. Here's what it looks like:
 
 | Machine | Plant | Type | Risk Tier | Score | Top Signal | Last Reading |
 |---------|-------|------|-----------|-------|------------|--------------|
@@ -62,16 +62,16 @@ The `Results/Result-datas/Overview_data.csv` file has the actual scored output f
 
 | View | Screenshot |
 |------|-----------|
-| Dashboard overview (page 1) | `Results/screen-shots/Dashboard-page-1.png` |
-| Risk distribution chart | `Results/screen-shots/Dashboard-DIstribution-chart.png` |
-| All-machine trend graph | `Results/screen-shots/all-record-trends-graph.png` |
-| Per-machine score + error viewer | `Results/screen-shots/Each-machine-score-and-errorViewer.png` |
-| Individual machine drilldown | `Results/screen-shots/Each-machine-view.png` |
-| Filters and controls | `Results/screen-shots/Filters-controls.png` |
+| Dashboard overview (page 1) | `plant-maintenance-intelligence/Results/screen-shots/Dashboard-page-1.png` |
+| Risk distribution chart | `plant-maintenance-intelligence/Results/screen-shots/Dashboard-DIstribution-chart.png` |
+| All-machine trend graph | `plant-maintenance-intelligence/Results/screen-shots/all-record-trends-graph.png` |
+| Per-machine score + error viewer | `plant-maintenance-intelligence/Results/screen-shots/Each-machine-score-and-errorViewer.png` |
+| Individual machine drilldown | `plant-maintenance-intelligence/Results/screen-shots/Each-machine-view.png` |
+| Filters and controls | `plant-maintenance-intelligence/Results/screen-shots/Filters-controls.png` |
 
 ### Demo Video
 
-Full walkthrough of the dashboard: `Results/Result-video.mp4`
+Full walkthrough of the dashboard: `plant-maintenance-intelligence/Results/Result-video.mp4`
 
 ---
 
@@ -112,7 +112,7 @@ For a full setup (fresh EC2), use `deploy.ps1` — but that one needs elevated P
 Keep this terminal open while you use the dashboard:
 
 ```powershell
-ssh -i "d:\Machinary-problem\sheetal-server.pem" -L 8501:localhost:8501 admin@ec2-18-212-151-119.compute-1.amazonaws.com
+ssh -i "d:\Machinary-problem\key.pem" -L 8501:localhost:8501 password_for_aws@ec2-18-212-151-119.compute-1.amazonaws.com
 ```
 
 Then open `http://localhost:8501`.
