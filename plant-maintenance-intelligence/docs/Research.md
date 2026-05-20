@@ -11,6 +11,12 @@ When deciding how to write our risk scoring logic directly inside the database, 
 ## 3. Risk Scoring Methodology
 For calculating risk, we currently use a straightforward rule-based approach driven by domain knowledge—checking thresholds and calculating drift from baselines. The biggest benefit of this approach is explainability. When a machine is flagged as critical, our floor operators understand exactly *why* (e.g., "temperature is 20% over baseline"). While advanced machine learning methods like Isolation Forests or deep learning offer superior anomaly detection, they often act as "black boxes" and require weeks of data preparation and labeling. By starting with clear, explainable rules, we build trust with our engineering teams while laying the groundwork to introduce more complex ML models down the line.
 
+Key scoring specifics used in the prototype:
+- Weights: Vibration 30%, Temperature 25%, Pressure 20%, Service Overdue 15%, Power Anomaly 10%.
+- Measurement: `Vibration` and `Temperature` are computed from Z-scores versus per-machine baselines; `Pressure` and `Power Anomaly` are computed as percentage deviations from baseline.
+- Service overdue ramps starting at 80% of service interval and increases smoothly as the interval end approaches.
+- Error codes (E5xx) apply a flat `+0.25` premium to the computed score; the final score is clipped to `[0.0, 1.0]` so no reading can exceed `1.0`.
+
 ## 4. Mock Data Generation
 | Approach | Realism | Reproducibility | Build Time | Verdict |
 |---|---|---|---|---|

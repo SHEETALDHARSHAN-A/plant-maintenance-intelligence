@@ -30,6 +30,22 @@ For my scoring methodology, I've assigned specific weights based on signal impor
 - **Service Overdue (15%)**: This risk factor kicks in smoothly when a machine passes 80% of its scheduled service interval.
 - **Error Codes (e.g., E5xx)**: These act as an urgent override, automatically adding a flat 0.25 premium (capped at a total score of 1.0) to ensure faults are flagged immediately.
 
+Notes on calculation and capping:
+- Each of the five components is normalized to a 0–1 contribution then multiplied by its weight and summed to produce a base risk score in the 0–1 range.
+- `Vibration` and `Temperature` use Z-scores (current reading minus baseline divided by baseline stddev) that are passed through a short, monotonic curve to map extreme deviations into a 0–1 contribution.
+- `Pressure` and `Power Anomaly` are computed as percentage deviations from baseline (e.g., (value - baseline) / baseline) and then scaled into a 0–1 contribution before applying their weights.
+- `Service Overdue` begins to ramp from 0 once runtime reaches 80% of the scheduled service interval and increases smoothly toward 1.0 as it approaches the interval end.
+- After summing the weighted components, apply the `Error Code` override: if an E5xx-style critical error is present, add a flat `+0.25` to the score. The final score is then clipped to the range `[0.0, 1.0]` so no reading can exceed `1.0`.
+
+Example (simplified):
+- Vibration contribution = 0.50 × 0.30 = 0.15
+- Temperature contribution = 0.40 × 0.25 = 0.10
+- Pressure contribution = 0.10 × 0.20 = 0.02
+- Service overdue = 0.20 × 0.15 = 0.03
+- Power anomaly = 0.00 × 0.10 = 0.00
+- Base score = 0.30
+- E5xx present → +0.25 → 0.55 (then clipped between 0.0 and 1.0)
+
 ### Risk Tiers & Actions
 The resulting scores are bucketed into practical operational responses:
 - **0.00 – 0.34 is LOW (Green)**: The machine can continue normal operation with no action required.

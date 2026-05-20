@@ -23,7 +23,8 @@ My schema is intentionally forward-compatible. Because I isolated the complexity
 | runtime_hours | DECIMAL(10,2) | Cumulative hours | Drives overdue-service flag |
 | power_kw | DECIMAL(8,2) | Power draw in kilowatts | |
 | operating_mode | VARCHAR(20) | IDLE / NORMAL / HIGH_LOAD | Context for threshold |
-| error_code | VARCHAR(10) | NULL or E1xx–E5xx code | E5xx = +0.25 risk premium |
+| error_code | VARCHAR(10) | NULL or E1xx–E5xx code | E5xx = +0.25 risk premium (final score clipped to 1.0) |
+
 
 ### 2.2 MACHINE_REGISTRY (Dimension Table v1.1)
 | Column | Type | Description | Notes |

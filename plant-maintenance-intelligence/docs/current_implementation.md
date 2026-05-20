@@ -214,9 +214,9 @@ I calculate a weighted sum of 5 components:
 | Service Overdue | 15% | Ramps up after 80% of service interval → × 0.15 |
 | Power | 10% | % deviation from baseline × 2.5, capped → × 0.10 |
 
-Plus two adjustments:
-- **E5xx error code:** +0.25 flat bonus (these are critical fault codes)
-- **Missing sensor data:** +0.50 penalty (if I can't see it, I assume the worst)
+Plus two adjustments and final clipping:
+- **E5xx error code:** +0.25 flat bonus (these are critical fault codes). After adding this premium the final score is clipped to the range `[0.0, 1.0]` so the output cannot exceed `1.0`.
+- **Missing sensor data:** +0.50 penalty (if a required sensor is missing I conservatively increase risk). This is a separate adjustment and likewise subject to the final `[0.0, 1.0]` clipping step.
 
 ### The Z-Score Curve
 

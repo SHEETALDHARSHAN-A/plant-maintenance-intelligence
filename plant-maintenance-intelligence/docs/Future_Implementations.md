@@ -48,3 +48,5 @@ def run(ctx):
         ctx.emit(row['machine_id'], float(scores[i]), scores[i] < 0)
 /
 ```
+
+Note on current scoring baseline: the prototype uses rule-based weights (Vibration 30%, Temperature 25%, Pressure 20%, Service Overdue 15%, Power 10%), with E5xx errors adding a flat +0.25 premium and final scores clipped to 1.0. Any ML model should be trained to reproduce or improve upon this baseline for backward compatibility.
