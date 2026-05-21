@@ -25,14 +25,14 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
     curl wget ca-certificates gnupg lsb-release \
     python3 python3-pip python3-venv \
     net-tools htop netcat-openbsd
-echo "  ✓ System packages ready"
+echo "  OK System packages ready"
 
 # ── 2. Install Docker ─────────────────────────────────────────
 echo ""
 echo "[2/6] Installing Docker..."
 
 if command -v docker &>/dev/null; then
-    echo "  ✓ Docker already installed: $(docker --version)"
+    echo "  OK Docker already installed: $(docker --version)"
 else
     # Official Docker install for Debian/Ubuntu
     sudo install -m 0755 -d /etc/apt/keyrings
@@ -55,14 +55,14 @@ else
 
     # Allow admin user to run docker without sudo
     sudo usermod -aG docker "$USER" || true
-    echo "  ✓ Docker installed: $(docker --version)"
+    echo "  OK Docker installed: $(docker --version)"
 fi
 
 # ── 3. Pull Exasol Docker image ───────────────────────────────
 echo ""
 echo "[3/6] Pulling Exasol CE Docker image (this may take a few minutes)..."
 sudo docker pull "${EXASOL_IMAGE}"
-echo "  ✓ Image pulled"
+echo "  OK Image pulled"
 
 # ── 4. Start Exasol container ─────────────────────────────────
 echo ""
@@ -89,7 +89,7 @@ sudo docker run -d \
     --restart unless-stopped \
     "${EXASOL_IMAGE}"
 
-echo "  ✓ Container started: ${CONTAINER_NAME}"
+echo "  OK Container started: ${CONTAINER_NAME}"
 
 # ── 5. Wait for Exasol to be ready ───────────────────────────
 echo ""
@@ -97,7 +97,7 @@ echo "[5/6] Waiting for Exasol to be ready (up to 3 minutes)..."
 READY=false
 for i in $(seq 1 36); do
     if nc -z localhost ${EXASOL_PORT} 2>/dev/null; then
-        echo "  ✓ Exasol is listening on port ${EXASOL_PORT} (after $((i*5))s)"
+        echo "  OK Exasol is listening on port ${EXASOL_PORT} (after $((i*5))s)"
         READY=true
         break
     fi
@@ -133,7 +133,7 @@ pip3 install \
     plotly==5.22.0 \
     websocket-client==1.8.0
 
-echo "  ✓ Python packages installed"
+echo "  OK Python packages installed"
 
 # ── Summary ───────────────────────────────────────────────────
 echo ""

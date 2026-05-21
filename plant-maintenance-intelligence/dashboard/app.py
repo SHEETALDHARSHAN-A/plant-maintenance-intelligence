@@ -191,14 +191,14 @@ def new_conn():
         raise
 
 
-def query_df(sql: str) -> pd.DataFrame:
-    """Run SQL, return DataFrame with uppercase column names."""
+def query_df(sql: str, params: list = None) -> pd.DataFrame:
+    """Run SQL with optional params, return DataFrame with uppercase column names."""
     logger.debug(f"Executing query: {sql[:100]}..." if len(sql) > 100 else f"Executing query: {sql}")
     try:
         conn = new_conn()
         try:
             if hasattr(conn, "export_to_pandas"):
-                df = conn.export_to_pandas(sql)
+                df = conn.export_to_pandas(sql, params=params) if params else conn.export_to_pandas(sql)
                 if df is None or df.empty:
                     logger.debug("Query returned empty result")
                     return pd.DataFrame()
@@ -206,7 +206,10 @@ def query_df(sql: str) -> pd.DataFrame:
                 logger.info(f"Query executed successfully, returned {len(df)} rows with columns: {list(df.columns)}")
                 return df
 
-            stmt = conn.execute(sql)
+            if params:
+                stmt = conn.execute(sql, params)
+            else:
+                stmt = conn.execute(sql)
             rows = stmt.fetchall()
             if not rows:
                 logger.debug("Query returned empty result")
@@ -229,13 +232,13 @@ def query_df(sql: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def query_val(sql: str):
+def query_val(sql: str, params: list = None):
     """Run SQL, return single scalar value."""
     logger.debug(f"Executing scalar query: {sql[:100]}..." if len(sql) > 100 else f"Executing scalar query: {sql}")
     try:
         conn = new_conn()
         try:
-            result = conn.execute(sql).fetchval()
+            result = conn.execute(sql, params).fetchval() if params else conn.execute(sql).fetchval()
             logger.info(f"Scalar query executed successfully, returned: {result}")
             return result
         finally:
@@ -319,12 +322,24 @@ with st.sidebar:
 
 # ── SQL helpers ────────────────────────────────────────────────────────────────
 def plant_in():
-    vals = [str(v).strip().upper().replace("'", "''") for v in plant_filter if str(v).strip()]
-    return "'" + "','".join(vals) + "'" if vals else "''"
+    vals = [str(v).strip().upper() for v in plant_filter if str(v).strip()]
+    return vals
 
 def tier_in():
-    vals = [str(v).strip().upper().replace("'", "''") for v in tier_filter if str(v).strip()]
-    return "'" + "','".join(vals) + "'" if vals else "''"
+    vals = [str(v).strip().upper() for v in tier_filter if str(v).strip()]
+    return vals
+
+
+def build_in_clause(vals: list):
+    """Return (placeholders, params) for an SQL IN clause using positional params.
+
+    Example: vals=['A','B'] -> returns ('?,?', ['A','B'])
+    If vals is empty, returns ("''", []) to produce an empty literal set.
+    """
+    if not vals:
+        return "''", []
+    placeholders = ','.join(['?'] * len(vals))
+    return placeholders, vals
 
 
 # ── Header ─────────────────────────────────────────────────────────────────────
@@ -349,16 +364,19 @@ with st.expander("Prototype Glossary", expanded=False):
 
 # ── KPI row ────────────────────────────────────────────────────────────────────
 logger.info("Rendering KPI row - fetching risk summary data")
-summary_df = query_df(f"""
+plant_ph, plant_params = build_in_clause(plant_in())
+tier_ph, tier_params = build_in_clause(tier_in())
+summary_sql = f"""
     SELECT {tier_case_sql('risk_score')} AS RISK_TIER,
            COUNT(DISTINCT machine_id) AS machine_count,
            ROUND(AVG(risk_score), 4)  AS avg_score
     FROM PLANT_MAINTENANCE.V_LATEST_RISK_SUMMARY
-        WHERE UPPER(TRIM(plant_id))  IN ({plant_in()})
-            AND {tier_case_sql('risk_score')} IN ({tier_in()})
+        WHERE UPPER(TRIM(plant_id))  IN ({plant_ph})
+            AND {tier_case_sql('risk_score')} IN ({tier_ph})
     GROUP BY {tier_case_sql('risk_score')}
     ORDER BY MAX(risk_score) DESC
-""")
+"""
+summary_df = query_df(summary_sql, params=(plant_params + tier_params))
 
 tier_counts = {}
 if not summary_df.empty:
@@ -390,22 +408,23 @@ with col_l:
     st.markdown('<span class="section-tag">OVERVIEW</span>', unsafe_allow_html=True)
     st.subheader("Machine Risk Overview")
     logger.debug("Fetching machine risk overview data")
-    overview_df = query_df(f"""
+    overview_sql = f"""
         SELECT machine_id      AS MACHINE,
                plant_id        AS PLANT,
-             machine_type    AS MACHINE_TYPE,
+               machine_type    AS MACHINE_TYPE,
                location_zone   AS LOCATION_ZONE,
-             criticality_class AS CRITICALITY_CLASS,
-                             {tier_case_sql('risk_score')} AS RISK_TIER,
+               criticality_class AS CRITICALITY_CLASS,
+               {tier_case_sql('risk_score')} AS RISK_TIER,
                ROUND(risk_score, 4) AS SCORE,
                top_signal      AS TOP_SIGNAL,
-             recommended_action AS RECOMMENDED_ACTION,
+               recommended_action AS RECOMMENDED_ACTION,
                TO_CHAR(reading_ts, 'YYYY-MM-DD HH24:MI') AS LAST_READING
         FROM PLANT_MAINTENANCE.V_LATEST_RISK_SUMMARY
-                WHERE UPPER(TRIM(plant_id))  IN ({plant_in()})
-                                        AND {tier_case_sql('risk_score')} IN ({tier_in()})
+        WHERE UPPER(TRIM(plant_id)) IN ({plant_ph})
+          AND {tier_case_sql('risk_score')} IN ({tier_ph})
         ORDER BY risk_score DESC
-    """)
+    """
+    overview_df = query_df(overview_sql, params=(plant_params + tier_params))
     if not overview_df.empty:
         logger.info(f"Overview table: {len(overview_df)} machines displayed")
         def style_tier(val):
@@ -437,14 +456,47 @@ with col_r:
 
 st.divider()
 
+# ── Actionable Top-N ─────────────────────────────────────────────────────────
+logger.info("Rendering Top 5 actionable machines")
+top5_sql = f"""
+    SELECT machine_id AS MACHINE,
+           plant_id   AS PLANT,
+           machine_type AS MACHINE_TYPE,
+           TO_CHAR(reading_ts,'YYYY-MM-DD HH24:MI') AS LAST_READING,
+           ROUND(risk_score,4) AS SCORE,
+           risk_tier AS RISK_TIER,
+           reason,
+           action,
+           priority_rank
+    FROM PLANT_MAINTENANCE.V_ACTIONABLE_RISK
+    WHERE UPPER(TRIM(plant_id)) IN ({plant_ph})
+      AND {tier_case_sql('risk_score')} IN ({tier_ph})
+    ORDER BY priority_rank ASC
+    LIMIT 5
+"""
+top5_df = query_df(top5_sql, params=(plant_params + tier_params))
+if not top5_df.empty:
+    st.markdown('<span class="section-tag">TOP PRIORITY</span>', unsafe_allow_html=True)
+    st.subheader("Top 5 Machines — Actionable Summary")
+    def style_priority(row):
+        color = TIER_COLORS.get(row['RISK_TIER'], '#888')
+        return [f'background-color:{color}22;color:{color};font-weight:bold' if col=='RISK_TIER' else '' for col in row.index]
+    st.table(top5_df[['MACHINE','PLANT','SCORE','RISK_TIER','REASON','ACTION']].rename(columns={
+        'MACHINE':'Machine','PLANT':'Plant','SCORE':'Score','RISK_TIER':'Tier','REASON':'Reason','ACTION':'Action'
+    }))
+else:
+    st.info("No actionable top machines for selected filters.")
+
+st.divider()
+
 # ── Row 2: 24h trend ───────────────────────────────────────────────────────────
 logger.info("Rendering Row 2: Risk score trend chart")
 st.markdown('<span class="section-tag">TREND</span>', unsafe_allow_html=True)
 st.subheader("Risk Score Trend (all scored readings)")
 
-# Use all scored results ordered by time — not just last 24h (mock data is historical)
+# Use all scored results ordered by time — the mock dataset is historical
 logger.debug("Fetching trend data for all machines")
-trend_df = query_df(f"""
+trend_sql = f"""
     SELECT s.machine_id  AS MACHINE,
            r.plant_id    AS PLANT,
            s.reading_ts  AS READING_TS,
@@ -453,10 +505,11 @@ trend_df = query_df(f"""
            s.top_signal  AS TOP_SIGNAL
     FROM PLANT_MAINTENANCE.SCORED_TELEMETRY_RESULTS s
     JOIN PLANT_MAINTENANCE.MACHINE_REGISTRY r ON s.machine_id = r.machine_id
-        WHERE UPPER(TRIM(r.plant_id))  IN ({plant_in()})
-            AND {tier_case_sql('s.risk_score')} IN ({tier_in()})
+        WHERE UPPER(TRIM(r.plant_id))  IN ({plant_ph})
+          AND {tier_case_sql('s.risk_score')} IN ({tier_ph})
     ORDER BY s.reading_ts ASC
-""")
+"""
+trend_df = query_df(trend_sql, params=(plant_params + tier_params))
 
 if not trend_df.empty:
     logger.info(f"Trend chart: {len(trend_df)} data points for {trend_df['MACHINE'].nunique()} machines")
@@ -492,7 +545,16 @@ machines_df = query_df(
 machine_list = machines_df["MACHINE_ID"].tolist() if not machines_df.empty else []
 logger.info(f"Available machines for drilldown: {len(machine_list)} machines")
 
+if not machine_list:
+    st.info("No machines available for drilldown.")
+    st.stop()
+
 selected = st.selectbox("Select a machine", options=machine_list)
+selected = str(selected).strip()
+
+if selected not in machine_list:
+    st.error("Invalid machine selection.")
+    st.stop()
 
 if selected:
     logger.info(f"Machine selected for drilldown: {selected}")
@@ -501,7 +563,7 @@ if selected:
     with d1:
         st.markdown(f"**Last 72 sensor readings — `{selected}`**")
         logger.debug(f"Fetching sensor telemetry for machine {selected}")
-        sensor_df = query_df(f"""
+        sensor_sql = """
             SELECT TO_CHAR(reading_ts,'YYYY-MM-DD HH24:MI') AS READING_TIME,
                    temperature_c   AS TEMP_C,
                    vibration_mm_s  AS VIB_MM_S,
@@ -510,10 +572,11 @@ if selected:
                    operating_mode  AS OPERATING_MODE,
                    error_code      AS ERROR_CODE
             FROM PLANT_MAINTENANCE.MACHINE_TELEMETRY
-            WHERE machine_id = '{selected}'
+            WHERE machine_id = ?
             ORDER BY reading_ts DESC
             LIMIT 72
-        """)
+        """
+        sensor_df = query_df(sensor_sql, params=[selected])
         if not sensor_df.empty:
             logger.info(f"Sensor data retrieved: {len(sensor_df)} readings for {selected}")
             st.dataframe(sensor_df, use_container_width=True, height=300)
@@ -524,15 +587,16 @@ if selected:
     with d2:
         st.markdown(f"**Risk score history — `{selected}`**")
         logger.debug(f"Fetching risk score history for machine {selected}")
-        hist_df = query_df(f"""
+        hist_sql = f"""
             SELECT reading_ts  AS READING_TS,
                    risk_score  AS RISK_SCORE,
                    {tier_case_sql('risk_score')} AS TIER,
                    top_signal  AS TOP_SIGNAL
             FROM PLANT_MAINTENANCE.SCORED_TELEMETRY_RESULTS
-            WHERE machine_id = '{selected}'
+            WHERE machine_id = ?
             ORDER BY reading_ts ASC
-        """)
+        """
+        hist_df = query_df(hist_sql, params=[selected])
         if not hist_df.empty:
             logger.info(f"Risk score history retrieved: {len(hist_df)} records for {selected}")
             fig3 = px.line(
@@ -548,14 +612,15 @@ if selected:
 
     # Latest recommendation box
     logger.debug(f"Fetching latest risk assessment for machine {selected}")
-    latest_df = query_df(f"""
+    latest_sql = f"""
             SELECT {tier_case_sql('risk_score')} AS RISK_TIER,
              ROUND(risk_score,4) AS RISK_SCORE,
              top_signal AS TOP_SIGNAL,
              recommended_action AS RECOMMENDED_ACTION
         FROM PLANT_MAINTENANCE.V_LATEST_RISK_SUMMARY
-        WHERE machine_id = '{selected}'
-    """)
+        WHERE machine_id = ?
+    """
+    latest_df = query_df(latest_sql, params=[selected])
     if not latest_df.empty:
         row    = latest_df.iloc[0]
         tier   = str(row.get("RISK_TIER",   "UNKNOWN"))
@@ -580,7 +645,7 @@ st.divider()
 # ── Row 4: Error codes ─────────────────────────────────────────────────────────
 st.markdown('<span class="section-tag">RELIABILITY SIGNALS</span>', unsafe_allow_html=True)
 st.subheader("Error Code Analysis")
-err_df = query_df(f"""
+err_sql = f"""
     SELECT t.machine_id AS MACHINE,
         r.plant_id   AS PLANT,
         t.error_code AS ERROR_CODE,
@@ -591,11 +656,12 @@ err_df = query_df(f"""
     JOIN PLANT_MAINTENANCE.MACHINE_REGISTRY r ON t.machine_id = r.machine_id
     WHERE t.error_code IS NOT NULL
       AND TRIM(t.error_code) != ''
-            AND UPPER(TRIM(r.plant_id)) IN ({plant_in()})
+            AND UPPER(TRIM(r.plant_id)) IN ({plant_ph})
     GROUP BY t.machine_id, r.plant_id, t.error_code
     ORDER BY COUNT(*) DESC
     LIMIT 50
-""")
+"""
+err_df = query_df(err_sql, params=plant_params)
 if not err_df.empty:
     e1, e2 = st.columns([2, 3])
     with e1:

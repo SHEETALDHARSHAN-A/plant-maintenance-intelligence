@@ -9,7 +9,7 @@ Connects to Exasol CE and:
   5. Prints verification summary
 
 Credentials are read from .env (or environment variables).
-Copy .env.example → .env and fill in your values before running.
+Copy .env.example -> .env and fill in your values before running.
 """
 
 import argparse
@@ -39,11 +39,30 @@ except ImportError:
     print("ERROR: pyexasol not installed. Run: pip install pyexasol")
     sys.exit(1)
 
-BASE_DIR     = Path(__file__).parent.parent
-SQL_DIR      = BASE_DIR / "sql"
-DATA_DIR     = BASE_DIR / "data"
+BASE_DIR = Path(__file__).parent.parent
+SQL_DIR = BASE_DIR / "sql"
+DATA_DIR = BASE_DIR / "data"
 REGISTRY_CSV = DATA_DIR / "machine_registry.csv"
-TELEMETRY_CSV= DATA_DIR / "machine_telemetry.csv"
+TELEMETRY_CSV = DATA_DIR / "machine_telemetry.csv"
+
+
+def execute_sql_script(conn, sql_path: Path):
+    """Execute a SQL script that uses / as the statement terminator."""
+    script = sql_path.read_text(encoding="utf-8")
+    statement_lines = []
+
+    for line in script.splitlines():
+        if line.strip() == "/":
+            statement = "\n".join(statement_lines).strip()
+            if statement:
+                conn.execute(statement)
+            statement_lines = []
+        else:
+            statement_lines.append(line)
+
+    tail = "\n".join(statement_lines).strip()
+    if tail:
+        conn.execute(tail)
 
 
 # ── Connection ─────────────────────────────────────────────────────────────────
@@ -51,8 +70,8 @@ def connect(host, port, user, password):
     logger.info("=" * 70)
     logger.info(f"Connecting to Exasol at {host}:{port} as {user}")
     logger.info("=" * 70)
-    print(f"\n🔌 Connecting to Exasol at {host}:{port} as {user}...")
-    
+    print(f"\nConnecting to Exasol at {host}:{port} as {user}...")
+
     for attempt in range(1, 4):
         try:
             logger.debug(f"Connection attempt {attempt}/3")
@@ -67,33 +86,33 @@ def connect(host, port, user, password):
             logger.info("Connection established successfully")
             version_query = "SELECT PARAM_VALUE FROM EXA_METADATA WHERE PARAM_NAME = 'databaseProductVersion'"
             logger.debug(f"Exasol version: {conn.execute(version_query).fetchval()}")
-            print("   ✓ Connected")
+            print("   OK Connected")
             return conn
         except Exception as exc:
             logger.warning(f"Connection attempt {attempt}/3 failed: {exc}")
             print(f"   Attempt {attempt}/3 failed: {exc}")
             if attempt < 3:
-                logger.debug(f"Retrying in 5 seconds...")
+                logger.debug("Retrying in 5 seconds...")
                 time.sleep(5)
-    
+
     logger.critical("Could not connect to Exasol after 3 attempts")
     print("ERROR: Could not connect after 3 attempts.")
     sys.exit(1)
 
 
-# ── Schema SQL (no Lua UDFs — those are registered separately) ─────────────────
+# ── Schema SQL ────────────────────────────────────────────────────────────────
 def run_schema(conn):
     logger.info("Creating schema, tables, and views")
-    print("\n📄 Creating schema, tables, views...")
-    
+    print("\n Creating schema, tables, views...")
+
     try:
         conn.execute("CREATE SCHEMA IF NOT EXISTS PLANT_MAINTENANCE")
         logger.debug("Schema PLANT_MAINTENANCE created/verified")
         conn.execute("OPEN SCHEMA PLANT_MAINTENANCE")
         logger.debug("Schema PLANT_MAINTENANCE opened")
 
-        # Drop in FK-safe order
         objects_to_drop = [
+            "VIEW V_ACTIONABLE_RISK",
             "VIEW V_RISK_TREND_24H",
             "VIEW V_LATEST_RISK_SUMMARY",
             "VIEW V_TELEMETRY_FEATURES",
@@ -101,31 +120,30 @@ def run_schema(conn):
             "TABLE MACHINE_TELEMETRY",
             "TABLE MACHINE_REGISTRY",
         ]
-        
+
         for obj in objects_to_drop:
             try:
                 conn.execute(f"DROP {obj}")
                 logger.debug(f"Dropped {obj}")
-            except Exception as e:
-                logger.debug(f"Could not drop {obj} (may not exist): {e}")
-                pass
+            except Exception as exc:
+                logger.debug(f"Could not drop {obj} (may not exist): {exc}")
 
         conn.execute("""
 CREATE TABLE MACHINE_REGISTRY (
     machine_id                VARCHAR(20)  NOT NULL,
     plant_id                  VARCHAR(10)  NOT NULL,
-    machine_type              VARCHAR(50)  NOT NULL,
-    install_date              DATE         NOT NULL,
-    baseline_temp_c           DECIMAL(6,2) NOT NULL,
-    baseline_vibration        DECIMAL(6,3) NOT NULL,
-    baseline_pressure_bar     DECIMAL(6,2) NOT NULL,
-    baseline_power_kw         DECIMAL(8,2) NOT NULL,
-    baseline_stddev_temp      DECIMAL(6,3) NOT NULL,
-    baseline_stddev_vibration DECIMAL(6,3) NOT NULL,
-    service_interval_hours    DECIMAL(8,1) NOT NULL,
-    last_service_ts           TIMESTAMP    NOT NULL,
+    machine_type              VARCHAR(50)   NOT NULL,
+    install_date              DATE          NOT NULL,
+    baseline_temp_c           DECIMAL(6,2)  NOT NULL,
+    baseline_vibration        DECIMAL(6,3)  NOT NULL,
+    baseline_pressure_bar     DECIMAL(6,2)  NOT NULL,
+    baseline_power_kw         DECIMAL(8,2)  NOT NULL,
+    baseline_stddev_temp      DECIMAL(6,3)  NOT NULL,
+    baseline_stddev_vibration DECIMAL(6,3)  NOT NULL,
+    service_interval_hours    DECIMAL(8,1)  NOT NULL,
+    last_service_ts           TIMESTAMP     NOT NULL,
     location_zone             VARCHAR(20),
-    criticality_class         VARCHAR(10)  DEFAULT 'STANDARD',
+    criticality_class         VARCHAR(10)   DEFAULT 'STANDARD',
     CONSTRAINT pk_machine_registry PRIMARY KEY (machine_id)
 )""")
         logger.info("Created table: MACHINE_REGISTRY")
@@ -178,8 +196,8 @@ SELECT
     t.power_kw,
     t.operating_mode,
     t.error_code,
-    (t.temperature_c  - r.baseline_temp_c)      / NULLIFZERO(r.baseline_stddev_temp)      AS z_temp,
-    (t.vibration_mm_s - r.baseline_vibration)   / NULLIFZERO(r.baseline_stddev_vibration) AS z_vibration,
+    (t.temperature_c - r.baseline_temp_c) / NULLIFZERO(r.baseline_stddev_temp) AS z_temp,
+    (t.vibration_mm_s - r.baseline_vibration) / NULLIFZERO(r.baseline_stddev_vibration) AS z_vibration,
     AVG(t.temperature_c) OVER (
         PARTITION BY t.machine_id ORDER BY t.reading_ts
         RANGE BETWEEN INTERVAL '24' HOUR PRECEDING AND CURRENT ROW
@@ -206,182 +224,129 @@ JOIN MACHINE_REGISTRY r ON t.machine_id = r.machine_id""")
         conn.execute("""
 CREATE OR REPLACE VIEW V_LATEST_RISK_SUMMARY AS
 SELECT
-    s.machine_id, r.plant_id, r.machine_type, r.location_zone,
-    r.criticality_class, s.reading_ts, s.risk_score, s.risk_tier,
-    s.top_signal, s.recommended_action, s.model_version
+    s.machine_id,
+    r.plant_id,
+    r.machine_type,
+    r.location_zone,
+    r.criticality_class,
+    s.reading_ts,
+    s.risk_score,
+    s.risk_tier,
+    s.top_signal,
+    s.recommended_action,
+    s.model_version
 FROM SCORED_TELEMETRY_RESULTS s
 JOIN MACHINE_REGISTRY r ON s.machine_id = r.machine_id
-WHERE (s.machine_id, s.risk_score) IN (
-    SELECT machine_id, MAX(risk_score)
-    FROM SCORED_TELEMETRY_RESULTS
-    WHERE reading_ts >= (
-        SELECT ADD_HOURS(MAX(reading_ts), -144)
-        FROM SCORED_TELEMETRY_RESULTS
-    )
-    GROUP BY machine_id
-)""")
+QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY s.machine_id
+    ORDER BY s.reading_ts DESC
+) = 1""")
         logger.info("Created view: V_LATEST_RISK_SUMMARY")
+
+        conn.execute("""
+CREATE OR REPLACE VIEW V_ACTIONABLE_RISK AS
+WITH latest AS (
+    SELECT *
+    FROM V_LATEST_RISK_SUMMARY
+), ranked AS (
+    SELECT
+        l.machine_id,
+        l.plant_id,
+        l.machine_type,
+        l.location_zone,
+        l.criticality_class,
+        l.reading_ts,
+        l.risk_score,
+        l.risk_tier,
+        l.top_signal,
+        l.recommended_action AS action,
+        CASE
+            WHEN l.top_signal = 'VIBRATION' THEN 'Elevated vibration relative to baseline (Z-score)'
+            WHEN l.top_signal = 'TEMPERATURE' THEN 'Elevated temperature relative to baseline (Z-score)'
+            WHEN l.top_signal = 'PRESSURE' THEN 'Pressure deviation from baseline'
+            WHEN l.top_signal = 'POWER' THEN 'Power draw anomaly relative to baseline'
+            WHEN l.top_signal = 'SERVICE_OVERDUE' THEN 'Approaching or past scheduled service interval'
+            WHEN l.top_signal = 'ERROR_CODE_E5XX' THEN 'Critical error code observed (E5xx)'
+            WHEN l.top_signal = 'DATA_LOSS' THEN 'Telemetry or sensor data missing - investigate connectivity'
+            ELSE l.top_signal
+        END AS reason,
+        ROW_NUMBER() OVER (ORDER BY l.risk_score DESC) AS priority_rank
+    FROM latest l
+)
+SELECT
+    machine_id,
+    plant_id,
+    machine_type,
+    location_zone,
+    criticality_class,
+    reading_ts,
+    risk_score,
+    risk_tier,
+    top_signal,
+    action,
+    reason,
+    priority_rank,
+    CASE WHEN priority_rank <= 5 THEN TRUE ELSE FALSE END AS is_top_5
+FROM ranked""")
+        logger.info("Created view: V_ACTIONABLE_RISK")
 
         conn.execute("""
 CREATE OR REPLACE VIEW V_RISK_TREND_24H AS
 SELECT
-    s.machine_id, r.plant_id, r.machine_type,
-    s.reading_ts, s.risk_score, s.risk_tier, s.top_signal
+    s.machine_id,
+    r.plant_id,
+    r.machine_type,
+    s.reading_ts,
+    s.risk_score,
+    s.risk_tier,
+    s.top_signal
 FROM SCORED_TELEMETRY_RESULTS s
 JOIN MACHINE_REGISTRY r ON s.machine_id = r.machine_id
 WHERE s.reading_ts >= ADD_HOURS(CURRENT_TIMESTAMP, -24)""")
         logger.info("Created view: V_RISK_TREND_24H")
 
         logger.info("Schema creation completed successfully")
-        print("   ✓ Schema, tables, views created")
-    except Exception as e:
-        logger.error(f"Schema creation failed: {e}", exc_info=True)
+        print("   OK Schema, tables, views created")
+    except Exception as exc:
+        logger.error(f"Schema creation failed: {exc}", exc_info=True)
         raise
 
 
-# ── Lua UDFs (correct run(ctx) pattern for Exasol scalar UDFs) ────────────────
+# ── Lua UDFs ──────────────────────────────────────────────────────────────────
 def register_udfs(conn):
     logger.info("Registering Lua UDFs")
-    print("\n📄 Registering Lua UDFs...")
-    
+    print("\n Registering Lua UDFs...")
+
     try:
-        conn.execute("OPEN SCHEMA PLANT_MAINTENANCE")
-        logger.debug("Schema opened for UDF registration")
+        execute_sql_script(conn, SQL_DIR / "02_lua_udf.sql")
+        print("   OK COMPUTE_RISK_SCORE registered from 02_lua_udf.sql")
 
-        conn.execute("""
-CREATE OR REPLACE LUA SCALAR SCRIPT COMPUTE_RISK_SCORE(
-    mid  VARCHAR(20), tc   DOUBLE,  vib  DOUBLE,  pres DOUBLE,
-    rth  DOUBLE,      pwr  DOUBLE,  err  VARCHAR(10),
-    bt   DOUBLE,      bv   DOUBLE,  bp   DOUBLE,  bpwr DOUBLE,
-    sdt  DOUBLE,      sdv  DOUBLE,  hsvc DOUBLE,  sint DOUBLE
-) RETURNS VARCHAR(500) AS
-
-local function clamp(v)
-    if v < 0 then return 0 elseif v > 1 then return 1 else return v end
-end
-local function zscore(z)
-    if z == nil then return 0 end
-    if z < 1.0 then return z * 0.15
-    elseif z < 2.0 then return 0.15 + (z-1.0)*0.30
-    elseif z < 3.0 then return 0.45 + (z-2.0)*0.35
-    else return clamp(0.80 + (z-3.0)*0.10) end
-end
-local function sdiv(a,b)
-    if b==nil or b==0 then return 0 else return a/b end
-end
--- Exasol passes SQL NULL as a Lua userdata, not nil
-local function nn(v, fallback)
-    if v == nil or type(v) == "userdata" then return fallback or 0 end
-    return v
-end
-local function ns(v)
-    if v == nil or type(v) == "userdata" then return "" end
-    return tostring(v)
-end
-
-function run(ctx)
-    local t  = nn(ctx.tc,   nn(ctx.bt,  0))
-    local v  = nn(ctx.vib,  nn(ctx.bv,  0))
-    local p  = nn(ctx.pres, nn(ctx.bp,  0))
-    local pw = nn(ctx.pwr,  nn(ctx.bpwr,0))
-    local e  = ns(ctx.err)
-    local h  = nn(ctx.hsvc, 0)
-    local si = nn(ctx.sint, 2000)
-    local _bt  = nn(ctx.bt,   0)
-    local _bv  = nn(ctx.bv,   0)
-    local _bp  = nn(ctx.bp,   0)
-    local _bpwr= nn(ctx.bpwr, 0)
-    local _sdt = nn(ctx.sdt,  1)
-    local _sdv = nn(ctx.sdv,  1)
-
-    local sv = zscore(math.abs(sdiv(v-_bv,  _sdv))) * 0.30
-    local st = zscore(math.abs(sdiv(t-_bt,  _sdt))) * 0.25
-    local sp = clamp(math.abs(sdiv(p-_bp,   _bp )) * 3.0) * 0.20
-    local ss = clamp(sdiv(h, si) - 0.8) * 5.0 * 0.15
-    local sw = clamp(math.abs(sdiv(pw-_bpwr,_bpwr)) * 2.5) * 0.10
-    local raw= sv + st + sp + ss + sw
-    local ex = 0
-    if string.match(e, "^E5") then ex = 0.25 end
-    local sc = clamp(raw + ex)
-
-    local tier
-    if sc>=0.80 then tier="CRITICAL"
-    elseif sc>=0.60 then tier="HIGH"
-    elseif sc>=0.35 then tier="MEDIUM"
-    else tier="LOW" end
-
-    local sigs = {
-        {n="VIBRATION",       v=sv/0.30},
-        {n="TEMPERATURE",     v=st/0.25},
-        {n="PRESSURE",        v=sp/0.20},
-        {n="SERVICE_OVERDUE", v=ss/0.15},
-        {n="POWER",           v=sw/0.10}
-    }
-    if ex > 0 then table.insert(sigs, {n="ERROR_CODE_E5XX", v=1.0}) end
-    local tn, tv = "NONE", -1
-    for _, s in ipairs(sigs) do
-        if s.v > tv then tv = s.v; tn = s.n end
-    end
-
-    local act
-    if tier=="CRITICAL" then act="IMMEDIATE SHUTDOWN - emergency maintenance within 4 hours"
-    elseif tier=="HIGH"  then act="URGENT - schedule maintenance within 24 hours"
-    elseif tier=="MEDIUM"then act="MONITOR - plan maintenance within 7 days; review "..tn
-    else act="NORMAL - continue standard monitoring schedule" end
-
-    return string.format("%.4f|%s|%s|%s", sc, tier, tn, act)
-end
-""")
-
-        conn.execute("""
-CREATE OR REPLACE LUA SCALAR SCRIPT PARSE_RISK_SCORE_FIELD(
-    raw VARCHAR(500),
-    idx DECIMAL(2,0)
-) RETURNS VARCHAR(500) AS
-function run(ctx)
-    if ctx.raw == nil or type(ctx.raw) == "userdata" then return nil end
-    local raw_str = tostring(ctx.raw)
-    local parts = {}
-    for p in string.gmatch(raw_str, "([^|]+)") do table.insert(parts, p) end
-    local i = 1
-    if ctx.idx ~= nil and type(ctx.idx) ~= "userdata" then
-        i = math.floor(tonumber(tostring(ctx.idx)) or 1)
-    end
-    return parts[i]
-end
-""")
-        print("   ✓ COMPUTE_RISK_SCORE + PARSE_RISK_SCORE_FIELD registered")
-
-        # Smoke test
-        r = conn.execute("""
+        smoke = conn.execute("""
         SELECT PLANT_MAINTENANCE.COMPUTE_RISK_SCORE(
             'T', 110.0, 5.5, 12.0, 1950.0, 155.0, 'E501',
             85.0, 2.5, 12.0, 150.0, 3.0, 0.4, 1950.0, 2000.0)
-    """).fetchval()
-        parts = r.split("|")
-        print(f"   ✓ UDF smoke test: score={parts[0]} tier={parts[1]} signal={parts[2]}")
+        """).fetchone()
+        print(f"   OK UDF smoke test: score={smoke[0]:.4f} tier={smoke[1]} signal={smoke[2]}")
 
-        # Test with NULL error_code (the common case)
-        r2 = conn.execute("""
+        smoke_null = conn.execute("""
         SELECT PLANT_MAINTENANCE.COMPUTE_RISK_SCORE(
             'T', 40.0, 1.0, 3.5, 500.0, 30.0, NULL,
             40.0, 1.0, 3.5, 30.0, 1.5, 0.2, 500.0, 3000.0)
-    """).fetchval()
-        parts2 = r2.split("|")
-        print(f"   ✓ NULL err test:  score={parts2[0]} tier={parts2[1]}")
-    except Exception as e:
-        logger.error(f"UDF registration failed: {e}", exc_info=True)
+        """).fetchone()
+        print(f"   OK NULL err test:  score={smoke_null[0]:.4f} tier={smoke_null[1]}")
+    except Exception as exc:
+        logger.error(f"UDF registration failed: {exc}", exc_info=True)
         raise
 
 
 # ── CSV bulk load ──────────────────────────────────────────────────────────────
 def bulk_load_csv(conn, csv_path, table, schema="PLANT_MAINTENANCE"):
-    print(f"\n📥 Loading {csv_path.name} → {schema}.{table}...")
+    print(f"\nLoading {csv_path.name} -> {schema}.{table}...")
     if not csv_path.exists():
         raise FileNotFoundError(f"CSV not found: {csv_path}")
-    with open(csv_path, encoding="utf-8") as f:
-        header = f.readline().strip().split(",")
-        row_count = sum(1 for _ in f)
+    with open(csv_path, encoding="utf-8") as file_handle:
+        header = file_handle.readline().strip().split(",")
+        row_count = sum(1 for _ in file_handle)
     start = time.time()
     conn.import_from_file(
         csv_path,
@@ -394,34 +359,26 @@ def bulk_load_csv(conn, csv_path, table, schema="PLANT_MAINTENANCE"):
             "columns": header,
         },
     )
-    print(f"   ✓ {row_count:,} rows loaded in {time.time()-start:.1f}s")
+    print(f"   OK {row_count:,} rows loaded in {time.time() - start:.1f}s")
 
 
 # ── Scoring ────────────────────────────────────────────────────────────────────
 def run_scoring(conn):
-    print("\n📄 Running Lua UDF scoring across all telemetry...")
+    print("\n Running Lua UDF scoring across all telemetry...")
     conn.execute("OPEN SCHEMA PLANT_MAINTENANCE")
     conn.execute("DELETE FROM SCORED_TELEMETRY_RESULTS")
 
     start = time.time()
-    # Parse the pipe-delimited UDF output using SQL string functions
-    # Format: "0.8361|CRITICAL|VIBRATION|IMMEDIATE SHUTDOWN..."
     conn.execute("""
 INSERT INTO SCORED_TELEMETRY_RESULTS
     (machine_id, reading_ts, risk_score, risk_tier, top_signal, recommended_action, model_version)
 SELECT
-    machine_id,
-    reading_ts,
-    CAST(SUBSTR(raw_result, 1, INSTR(raw_result, '|') - 1) AS DECIMAL(5,4)),
-    SUBSTR(raw_result,
-           INSTR(raw_result, '|') + 1,
-           INSTR(raw_result, '|', INSTR(raw_result, '|') + 1) - INSTR(raw_result, '|') - 1),
-    SUBSTR(raw_result,
-           INSTR(raw_result, '|', INSTR(raw_result, '|') + 1) + 1,
-           INSTR(raw_result, '|', INSTR(raw_result, '|', INSTR(raw_result, '|') + 1) + 1)
-             - INSTR(raw_result, '|', INSTR(raw_result, '|') + 1) - 1),
-    SUBSTR(raw_result,
-           INSTR(raw_result, '|', INSTR(raw_result, '|', INSTR(raw_result, '|') + 1) + 1) + 1),
+    res.machine_id,
+    res.reading_ts,
+    CAST(res.risk_score AS DECIMAL(5,4)),
+    res.risk_tier,
+    res.top_signal,
+    res.recommended_action,
     'LUA_V1'
 FROM (
     SELECT
@@ -429,11 +386,11 @@ FROM (
         f.reading_ts,
         COMPUTE_RISK_SCORE(
             f.machine_id,
-            COALESCE(f.temperature_c,  f.baseline_temp_c),
-            COALESCE(f.vibration_mm_s, f.baseline_vibration),
-            COALESCE(f.pressure_bar,   f.baseline_pressure_bar),
-            COALESCE(f.runtime_hours,  0),
-            COALESCE(f.power_kw,       f.baseline_power_kw),
+            f.temperature_c,
+            f.vibration_mm_s,
+            f.pressure_bar,
+            f.runtime_hours,
+            f.power_kw,
             CASE WHEN f.error_code IS NULL OR TRIM(f.error_code) = ''
                  THEN NULL ELSE TRIM(f.error_code) END,
             f.baseline_temp_c,
@@ -442,26 +399,25 @@ FROM (
             f.baseline_power_kw,
             f.baseline_stddev_temp,
             f.baseline_stddev_vibration,
-            GREATEST(f.hours_since_service, 0),
+            f.hours_since_service,
             f.service_interval_hours
-        ) AS raw_result
+        )
     FROM V_TELEMETRY_FEATURES f
     WHERE f.operating_mode != 'MAINTENANCE'
-) scored
-WHERE raw_result IS NOT NULL
+) AS res
 """)
     count = conn.execute("SELECT COUNT(*) FROM SCORED_TELEMETRY_RESULTS").fetchval()
-    print(f"   ✓ {count:,} rows scored in {time.time()-start:.1f}s")
+    print(f"   OK {count:,} rows scored in {time.time() - start:.1f}s")
 
 
 # ── Verification ───────────────────────────────────────────────────────────────
 def verify(conn):
-    print("\n📊 Verification:")
-    for tbl in ["MACHINE_REGISTRY", "MACHINE_TELEMETRY", "SCORED_TELEMETRY_RESULTS"]:
-        n = conn.execute(f"SELECT COUNT(*) FROM PLANT_MAINTENANCE.{tbl}").fetchval()
-        print(f"   {tbl:<35} {n:>8,} rows")
+    print("\nVerification:")
+    for table_name in ["MACHINE_REGISTRY", "MACHINE_TELEMETRY", "SCORED_TELEMETRY_RESULTS"]:
+        count = conn.execute(f"SELECT COUNT(*) FROM PLANT_MAINTENANCE.{table_name}").fetchval()
+        print(f"   {table_name:<35} {count:>8,} rows")
 
-    print("\n📈 Risk distribution (latest score per machine):")
+    print("\nRisk distribution (latest score per machine):")
     rows = conn.execute("""
         SELECT risk_tier,
                COUNT(DISTINCT machine_id) AS machines,
@@ -471,11 +427,10 @@ def verify(conn):
         GROUP BY risk_tier
         ORDER BY MAX(risk_score) DESC
     """).fetchall()
-    icons = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}
-    for tier, machines, avg, ids in rows:
-        bar = "█" * int(float(avg) * 20)
-        print(f"   {icons.get(tier,'⚪')} {tier:<10} {machines} machine(s)  avg={avg:.4f}  {bar}")
-        print(f"      → {ids}")
+    for tier, machines, avg, machine_ids in rows:
+        bar = "#" * int(float(avg) * 20)
+        print(f"   {tier:<10} {machines} machine(s)  avg={avg:.4f}  {bar}")
+        print(f"      -> {machine_ids}")
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -483,10 +438,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Load data into Exasol and run risk scoring."
     )
-    # CLI args override .env, which overrides built-in defaults
-    parser.add_argument("--host",     default=os.environ.get("EXA_HOST",     "localhost"))
-    parser.add_argument("--port",     type=int, default=int(os.environ.get("EXA_PORT", "8563")))
-    parser.add_argument("--user",     default=os.environ.get("EXA_USER",     "sys"))
+    parser.add_argument("--host", default=os.environ.get("EXA_HOST", "localhost"))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("EXA_PORT", "8563")))
+    parser.add_argument("--user", default=os.environ.get("EXA_USER", "sys"))
     parser.add_argument("--password", default=os.environ.get("EXA_PASSWORD", "exasol"))
     args = parser.parse_args()
 
@@ -494,17 +448,19 @@ def main():
     try:
         run_schema(conn)
         register_udfs(conn)
-        bulk_load_csv(conn, REGISTRY_CSV,  "MACHINE_REGISTRY")
+        bulk_load_csv(conn, REGISTRY_CSV, "MACHINE_REGISTRY")
         bulk_load_csv(conn, TELEMETRY_CSV, "MACHINE_TELEMETRY")
         run_scoring(conn)
         verify(conn)
         print("\nPhase 1 complete — Exasol loaded and scored. Ready for dashboard.\n")
     except Exception as exc:
         print(f"\nFailed: {exc}")
-        import traceback; traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
     finally:
         conn.close()
+
 
 if __name__ == "__main__":
     main()

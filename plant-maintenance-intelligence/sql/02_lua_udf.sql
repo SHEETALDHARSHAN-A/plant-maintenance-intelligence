@@ -62,10 +62,10 @@ end
 -- Main execution
 -- -------------------------------------------------------
 function run(ctx)
-    -- Null-guard all inputs and apply penalty if sensor data is missing
-    local missing_penalty = 0
-    if is_null(ctx.p_temperature_c) or is_null(ctx.p_vibration_mm_s) or is_null(ctx.p_pressure_bar) or is_null(ctx.p_power_kw) then
-        missing_penalty = 0.5
+    -- Null-guard all inputs. If required sensors are missing, emit a DATA_LOSS tier
+    local missing_required = false
+    if is_null(ctx.p_temperature_c) or is_null(ctx.p_vibration_mm_s) then
+        missing_required = true
     end
 
     local temp      = (not is_null(ctx.p_temperature_c) and ctx.p_temperature_c) or (not is_null(ctx.p_baseline_temp) and ctx.p_baseline_temp) or 0
@@ -97,7 +97,7 @@ function run(ctx)
 
     -- ---- Component 4: Service overdue (weight 0.15) ----
     local overdue_ratio = safe_div(hrs_svc, svc_int)
-    local s_svc = clamp(overdue_ratio - 0.8) * 5.0 * 0.15
+    local s_svc = clamp((overdue_ratio - 0.8) / 0.2) * 0.15
 
     -- ---- Component 5: Power anomaly (weight 0.10) ----
     local pwr_dev = math.abs(safe_div(pwr - bpwr, bpwr))
@@ -106,20 +106,24 @@ function run(ctx)
     -- ---- Raw score (0–1) ----
     local raw = s_vib + s_temp + s_pres + s_svc + s_pwr
 
-    -- ---- E5xx error premium (+0.25, capped at 1.0) ----
+    -- ---- E5xx error premium (+0.25) ----
     local e5xx_premium = 0
     if type(err) == "string" and string.match(err, "^E5") then
         e5xx_premium = 0.25
     end
 
-    local final_score = clamp(raw + e5xx_premium + missing_penalty)
-
-    -- ---- Risk tier ----
-    local tier
-    if     final_score >= 0.80 then tier = "CRITICAL"
-    elseif final_score >= 0.60 then tier = "HIGH"
-    elseif final_score >= 0.35 then tier = "MEDIUM"
-    else                            tier = "LOW"
+    -- If required sensor data (temperature or vibration) is missing, emit a distinct DATA_LOSS tier
+    local final_score = clamp(raw + e5xx_premium)
+    local tier = nil
+    if missing_required then
+        tier = "DATA_LOSS"
+        final_score = 0.0
+    else
+        if     final_score >= 0.80 then tier = "CRITICAL"
+        elseif final_score >= 0.60 then tier = "HIGH"
+        elseif final_score >= 0.35 then tier = "MEDIUM"
+        else                            tier = "LOW"
+        end
     end
 
     -- ---- Top signal (which component contributed most) ----
@@ -133,9 +137,6 @@ function run(ctx)
     if e5xx_premium > 0 then
         table.insert(signals, {name="ERROR_CODE_E5XX", val=1.0})
     end
-    if missing_penalty > 0 then
-        table.insert(signals, {name="MISSING_SENSOR_DATA", val=1.0})
-    end
 
     local top_signal = "NONE"
     local top_val    = -1
@@ -148,7 +149,9 @@ function run(ctx)
 
     -- ---- Recommended action ----
     local action
-    if tier == "CRITICAL" then
+    if tier == "DATA_LOSS" then
+        action = "DATA LOSS — investigate telemetry connectivity / sensor health immediately"
+    elseif tier == "CRITICAL" then
         action = "IMMEDIATE SHUTDOWN — schedule emergency maintenance within 4 hours"
     elseif tier == "HIGH" then
         action = "URGENT — schedule maintenance within 24 hours; increase monitoring frequency"

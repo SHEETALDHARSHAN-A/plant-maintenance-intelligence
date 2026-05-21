@@ -68,7 +68,7 @@ $sshTest = ssh -i $PemFile `
     "echo SSH_OK" 2>&1
 
 if ($sshTest -match "SSH_OK") {
-    Write-Host "  ✓ Connected to $EC2Host" -ForegroundColor Green
+    Write-Host "  OK Connected to $EC2Host" -ForegroundColor Green
 } else {
     Write-Host "  ✗ SSH failed: $sshTest" -ForegroundColor Red
     Write-Host ""
@@ -90,9 +90,9 @@ $telemetryFile = Join-Path $ProjectDir "data\machine_telemetry.csv"
 if (-not (Test-Path $telemetryFile)) {
     Write-Host "  Generating mock data..." -ForegroundColor Gray
     & python "$ProjectDir\scripts\generate_mock_data.py"
-    Write-Host "  ✓ Mock data generated" -ForegroundColor Green
+    Write-Host "  OK Mock data generated" -ForegroundColor Green
 } else {
-    Write-Host "  ✓ Mock data already exists — skipping generation" -ForegroundColor Green
+    Write-Host "  OK Mock data already exists - skipping generation" -ForegroundColor Green
 }
 
 # ── Step 3: Upload project files to EC2 ───────────────────────
@@ -105,7 +105,7 @@ ssh -i $PemFile -o StrictHostKeyChecking=no "${RemoteUser}@${EC2Host}" `
 scp -i $PemFile -o StrictHostKeyChecking=no -r "$ProjectDir\*" `
     "${RemoteUser}@${EC2Host}:~/plant-maintenance/"
 
-Write-Host "  ✓ Files uploaded" -ForegroundColor Green
+Write-Host "  OK Files uploaded" -ForegroundColor Green
 
 # ── Step 4: Load data into Exasol ─────────────────────────────
 Write-Host "`n[4/5] Loading data and scoring..." -ForegroundColor Yellow
@@ -115,7 +115,7 @@ $exaCheck = ssh -i $PemFile -o StrictHostKeyChecking=no "${RemoteUser}@${EC2Host
     "docker ps --filter name=exasol --format '{{.Status}}' 2>/dev/null || echo NOT_RUNNING" 2>&1
 
 if ($exaCheck -match "Up") {
-    Write-Host "  ✓ Exasol is running" -ForegroundColor Green
+    Write-Host "  OK Exasol is running" -ForegroundColor Green
 } else {
     Write-Host "  Exasol not running — starting it..." -ForegroundColor Yellow
     ssh -i $PemFile -o StrictHostKeyChecking=no "${RemoteUser}@${EC2Host}" `
@@ -127,7 +127,7 @@ if ($exaCheck -match "Up") {
 ssh -i $PemFile -o StrictHostKeyChecking=no "${RemoteUser}@${EC2Host}" `
     "cd ~/plant-maintenance && python3 scripts/load_to_exasol.py --host localhost --port 8563 --user sys --password exasol"
 
-Write-Host "  ✓ Data loaded and scored" -ForegroundColor Green
+Write-Host "  OK Data loaded and scored" -ForegroundColor Green
 
 # ── Step 5: Start Streamlit dashboard ─────────────────────────
 Write-Host "`n[5/5] Starting dashboard..." -ForegroundColor Yellow
@@ -148,7 +148,7 @@ $portCheck = ssh -i $PemFile -o StrictHostKeyChecking=no "${RemoteUser}@${EC2Hos
     "ss -tlnp | grep 8501 | head -1" 2>&1
 
 if ($portCheck -match "8501") {
-    Write-Host "  ✓ Dashboard is live on port 8501" -ForegroundColor Green
+    Write-Host "  OK Dashboard is live on port 8501" -ForegroundColor Green
 } else {
     Write-Host "  ⚠ Port 8501 not detected yet — may still be starting" -ForegroundColor Yellow
     Write-Host "  Check logs: ssh into EC2 and run: cat /tmp/streamlit.log" -ForegroundColor Gray
