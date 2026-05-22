@@ -34,9 +34,9 @@ My schema is intentionally forward-compatible. Because I isolated the complexity
 | plant_id | VARCHAR(20) | PLANT_A / PLANT_B / PLANT_C | |
 | machine_type | VARCHAR(50) | CNC_MILL / PRESS / etc | |
 | baseline_temp_c | DECIMAL(8,2) | Normal operating temperature | |
-| baseline_stddev_temp | DECIMAL(8,4) | Computed offline variance | NO LEAKAGE FIX |
+| baseline_stddev_temp | DECIMAL(8,4) | Computed offline variance |  |
 | baseline_vibration | DECIMAL(8,2) | Normal vibration baseline | |
-| baseline_stddev_vibration | DECIMAL(8,4) | Computed offline variance | NO LEAKAGE FIX |
+| baseline_stddev_vibration | DECIMAL(8,4) | Computed offline variance |  |
 | max_pressure | DECIMAL(8,2) | Critical pressure threshold | |
 | service_interval_hours | DECIMAL(10,2)| Scheduled maintenance | |
 
@@ -54,5 +54,5 @@ My schema is intentionally forward-compatible. Because I isolated the complexity
 
 ## 3. SQL — Corrected Feature Engineering
 Two major SQL design corrections secure the current architecture features:
-1. **Time-Based Window vs Row-Based**: I fixed the SQL logic from `ROWS BETWEEN 23 PRECEDING` to `RANGE BETWEEN INTERVAL '24' HOUR PRECEDING`. This appropriately handles missing time gaps in sensor data.
+1. fixed the SQL logic from `ROWS BETWEEN 23 PRECEDING` to `RANGE BETWEEN INTERVAL '24' HOUR PRECEDING`. This appropriately handles missing time gaps in sensor data...
 2. **Zero Data Leakage for Z-Scores**: I use static `baseline_stddev_*` columns from the registry table for z-score math instead of calculating live `STDDEV()` windows that would accidentally peek into the future across partition evaluations.
